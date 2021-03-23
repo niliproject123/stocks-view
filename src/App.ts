@@ -16,6 +16,7 @@ export interface StockCalculations {
   min,
   change,
   minMaxCount,
+  current,
   isGoingUp
 }
 
@@ -39,6 +40,7 @@ import { runInNewContext } from "vm"
 import { nextTick } from "process"
 import axios from "axios"
 import { Chart, Quote, YahooResponse } from "./interfaces"
+import { map } from "lodash";
 
 let md5 = require("md5")
 
@@ -179,7 +181,8 @@ class App {
         isGoingUp: '-',
         max: '-',
         min: '-',
-        minMaxCount: '-'
+        minMaxCount: '-',
+        current: '-'
       }
     }
 
@@ -193,6 +196,7 @@ class App {
       max: info.close[0],
       change: end / start,
       minMaxCount: 0,
+      current: end,
       isGoingUp: info.close[0] < info.close[1] ? true : false,
     }
 
