@@ -1,3 +1,5 @@
+const RoundToCount = 2
+const RoundTo = require('round-to');
 const ObjectsToCsv = require('objects-to-csv');
 const EndOfLine = require("os").EOL
 const AllowedIntervals = ["1m", "2m", "5m", "15m", "60m", "1d"]
@@ -98,8 +100,10 @@ class App {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
       this.getStocks(yahooReq).then((calcRes) => {
-        let csv = new ObjectsToCsv(calcRes);
+
         try {
+          let dataForCsv = calcRes.map(i => this.prepareForCsv(i))
+          let csv = new ObjectsToCsv(dataForCsv);
           csv.toDisk('./results.csv');
         } catch (ex) {
           Object.assign({ errorSavingToCsv: ex }, calcRes)
@@ -123,7 +127,7 @@ class App {
     this.express.use("/", router)
   }
 
-  private getStocks(req: YahooRequest): Promise<any> {
+  private getStocks(req: YahooRequest): Promise<StockResult[]> {
     return new Promise((resolve, reject) => {
       let interval = req.interval
       let range = req.range
@@ -148,7 +152,6 @@ class App {
             'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
           }
         };
-        console.log('a')
         return axios.request(options)
       })
       Promise.all(yahooRequests).then((yahooResponses: { data: YahooResponse }[]) => {
@@ -220,6 +223,16 @@ class App {
 
   private sendErrorResponse(res: express.Response, error: any) {
     ; (res as any).error(res, error)
+  }
+
+  private prepareForCsv(object: any): any {
+    let returned = {}
+    for (let key in object) {
+      if (typeof object[key] === 'number') returned[key] = RoundTo(object[key], RoundToCount)
+      else if (typeof object[key] === 'boolean') returned[key] = object[key].toString()
+      else returned[key] = object[key]
+    }
+    return returned
   }
 }
 
