@@ -99,7 +99,11 @@ class App {
       let yahooReq = req.body
       this.getStocks(yahooReq).then((calcRes) => {
         let csv = new ObjectsToCsv(calcRes);
-        csv.toDisk('./results.csv');
+        try {
+          csv.toDisk('./results.csv');
+        } catch (ex) {
+          Object.assign({ errorSavingToCsv: ex }, calcRes)
+        }
         this.sendSuccessResponse(res, calcRes)
       }).catch((error) => {
         next(error)
