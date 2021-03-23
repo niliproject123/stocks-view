@@ -90,35 +90,14 @@ class App {
       })
       next()
     })
-    var axios = require("axios").default;
     router.post('/getStocks', (req: { body: YahooRequest }, res, next) => {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
-      if (!yahooReq.token) yahooReq.token = "90be91777fmsh4d0db53c47a0102p1b9749jsn22d531898dd0"
-
-      let options = {
-        method: 'GET',
-        url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
-        params: { interval: req.body.interval, symbol: req.body.symbol, range: yahooReq.range, region: 'US' },
-        headers: {
-          'x-rapidapi-key': yahooReq.token,
-          'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
-        }
-      };
-
-      axios.request(options).then((yahooRes: { data: YahooResponse }) => {
-        let stockRequestInfo: StockRequestInfo = {
-          interval: req.body.interval,
-          symbol: req.body.symbol,
-          range: req.body.range
-        }
-        let calcResult: StockCalculations = this.processSingleStock(yahooRes.data.chart.result[0].indicators.quote[0])
-        let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
-        this.sendSuccessResponse(res, calculation)
+      this.getStocks(yahooReq).then((calcRes) => {
+        this.sendSuccessResponse(res, calcRes)
       }).catch((error) => {
-        next(error);
-      });
-
+        next(error)
+      })
     })
 
     router.use(function (err, req, res, next) {
@@ -132,6 +111,36 @@ class App {
     })
 
     this.express.use("/", router)
+  }
+
+  private getStocks(req: YahooRequest): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!req.token) req.token = "90be91777fmsh4d0db53c47a0102p1b9749jsn22d531898dd0"
+
+      let options = {
+        method: 'GET',
+        url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
+        params: { interval: req.interval, symbol: req.symbol, range: req.range, region: 'US' },
+        headers: {
+          'x-rapidapi-key': req.token,
+          'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
+        }
+      };
+
+      var axios = require("axios").default;
+      axios.request(options).then((yahooRes: { data: YahooResponse }) => {
+        let stockRequestInfo: StockRequestInfo = {
+          interval: req.interval,
+          symbol: req.symbol,
+          range: req.range
+        }
+        let calcResult: StockCalculations = this.processSingleStock(yahooRes.data.chart.result[0].indicators.quote[0])
+        let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
+        resolve(calculation)
+      }).catch((error) => {
+        reject(error)
+      });
+    })
   }
 
   private processSingleStock(info: Quote): StockCalculations {
@@ -166,10 +175,6 @@ class App {
     })
 
     return result
-  }
-
-  private sendSuccessResponseJson(res: express.Response, data: any) {
-    res.send(data)
   }
 
   private sendSuccessResponse(res: express.Response, data: any) {
