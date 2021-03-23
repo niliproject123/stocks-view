@@ -1,0 +1,28 @@
+{
+  "path1_arduino": "C:\\Users\\USER\\Desktop\\NILI_10.05.16\\Development\\arduino\\arduino\\Arduino",
+  "path_nili": "C:\\Users\\USER\\Desktop\\NILI_10.05.16\\Development\\app\\Android_studio\\git_nili\\nili-android-studio\\app\\src\\main\\java\\com\\nili",
+  "path_arduino": "C:\\Users\\USER\\Desktop\\NILI_10.05.16\\Development\\arduino\\arduino\\Arduino",
+  "path_ui": "C:\\DEV\\obtigo\\trunk\\xagon-ui\\src\\app",
+  "path_api": "C:\\DEV\\obtigo\\trunk\\xagon-api\\src",
+  "path_xagon": "C:\\DEV\\obtigo\\trunk\\",
+  "path_visualizer_work": "C://visualizer",
+  "path_visualizer_home": "C://Users//USER//Desktop//visualizer//project",
+  "path": "C:\\",
+  "allowedFileExtensions": [
+    ".ts",
+    ".json",
+    ".html",
+    ".xml",
+    ".java",
+    ".scala",
+    ".scss",
+    ".yml"
+  ],
+  "savedVisiIdsPath": "savedVisiIds.json",
+  "allowedFolders": [],
+  "forbiddenFolders": ["node_modules", "idea", ".vscode"],
+  "remarks": {
+    "default": ["/*", "*/"],
+    ".html": ["<!-", "-!>"]
+  }
+}
