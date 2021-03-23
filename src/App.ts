@@ -1,3 +1,8 @@
+const ObjectsToCsv = require('objects-to-csv');
+const EndOfLine = require("os").EOL
+const AllowedIntervals = ["1m", "2m", "5m", "15m", "60m", "1d"]
+const AllowedRange = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
+
 export interface StockRequestInfo {
   symbol,
   range,
@@ -15,8 +20,8 @@ export interface StockCalculations {
 export interface StockResult extends StockCalculations, StockCalculations { }
 
 export interface YahooRequest {
+  symbols: string[],
   range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" | "10y" | "ytd" | "max",
-  symbol: string,
   interval: "1m" | "2m" | "5m" | "15m" | "60m" | "1d",
   token: string
 }
@@ -31,11 +36,10 @@ import { normalize } from "path"
 import { runInNewContext } from "vm"
 import { nextTick } from "process"
 import axios from "axios"
-import { Quote, YahooResponse } from "./interfaces"
+import { Chart, Quote, YahooResponse } from "./interfaces"
 
 let md5 = require("md5")
 
-const EndOfLine = require("os").EOL
 
 class App {
   public Path = require("path")
@@ -90,10 +94,12 @@ class App {
       })
       next()
     })
-    router.post('/getStocks', (req: { body: YahooRequest }, res, next) => {
+    router.post('/getStocks', async (req: { body: YahooRequest }, res, next) => {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
       this.getStocks(yahooReq).then((calcRes) => {
+        let csv = new ObjectsToCsv(calcRes);
+        csv.toDisk('./results.csv');
         this.sendSuccessResponse(res, calcRes)
       }).catch((error) => {
         next(error)
@@ -115,35 +121,62 @@ class App {
 
   private getStocks(req: YahooRequest): Promise<any> {
     return new Promise((resolve, reject) => {
+      let interval = req.interval
+      let range = req.range
+
+      if (AllowedIntervals.indexOf(interval) === -1) {
+        reject("allowed interval values are: " + AllowedIntervals.join(','))
+      }
+      if (AllowedRange.indexOf(range) === -1) {
+        reject("allowed range values are: " + AllowedRange.join(','))
+      }
+
       if (!req.token) req.token = "90be91777fmsh4d0db53c47a0102p1b9749jsn22d531898dd0"
 
-      let options = {
-        method: 'GET',
-        url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
-        params: { interval: req.interval, symbol: req.symbol, range: req.range, region: 'US' },
-        headers: {
-          'x-rapidapi-key': req.token,
-          'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
-        }
-      };
-
       var axios = require("axios").default;
-      axios.request(options).then((yahooRes: { data: YahooResponse }) => {
-        let stockRequestInfo: StockRequestInfo = {
-          interval: req.interval,
-          symbol: req.symbol,
-          range: req.range
-        }
-        let calcResult: StockCalculations = this.processSingleStock(yahooRes.data.chart.result[0].indicators.quote[0])
-        let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
-        resolve(calculation)
+      let yahooRequests = req.symbols.map(symbol => {
+        let options = {
+          method: 'GET',
+          url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
+          params: { interval: interval, symbol: symbol, range: range },
+          headers: {
+            'x-rapidapi-key': req.token,
+            'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
+          }
+        };
+        console.log('a')
+        return axios.request(options)
+      })
+      Promise.all(yahooRequests).then((yahooResponses: { data: YahooResponse }[]) => {
+        let calculations = yahooResponses.map((yahooRes, index) => {
+          let stockRequestInfo: StockRequestInfo = {
+            symbol: req.symbols[index],
+            interval: interval,
+            range: range
+          }
+          let calcResult: StockCalculations = this.processSingleStock(yahooRes.data.chart)
+          let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
+          return calculation
+        })
+        resolve(calculations)
       }).catch((error) => {
         reject(error)
       });
     })
   }
 
-  private processSingleStock(info: Quote): StockCalculations {
+  private processSingleStock(response: Chart): StockCalculations {
+    if (!response.result || !response.result[0].indicators) {
+      return {
+        change: '-',
+        isGoingUp: '-',
+        max: '-',
+        min: '-',
+        minMaxCount: '-'
+      }
+    }
+
+    let info = response.result[0].indicators.quote[0]
     let length = info.close.length
     let start = info.close[0]
     let end = info.close[length - 1]
