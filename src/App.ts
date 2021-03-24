@@ -103,16 +103,16 @@ class App {
     router.post('/getStocks', async (req: { body: YahooRequest }, res, next) => {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
+      this.sendSuccessResponse(res, { working: true })
       this.getStocks(yahooReq).then(async (calcRes) => {
         try {
           let dataForCsv = calcRes.map(i => this.prepareForCsv(i))
           let csv = new ObjectsToCsv(dataForCsv);
-          await csv.toDisk('./results.csv');
+          await csv.toDisk('./results3.csv');
           console.log(await csv.toString())
         } catch (ex) {
           Object.assign({ errorSavingToCsv: ex }, calcRes)
         }
-        this.sendSuccessResponse(res, { working: true })
       }).catch((error) => {
         next(error)
       })
@@ -188,57 +188,55 @@ class App {
 
         let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
         results.push(calculation)
-        console.log(calculation)
+        let csv = new ObjectsToCsv([this.prepareForCsv(calculation)]);
+        await csv.toDisk('./results.csv', { append: true });
+        console.log(JSON.stringify(calculation))
       }
       resolve(results)
     })
   }
 
   private processSingleStock(response: Chart): StockCalculations {
-    if (!response.result || !response.result[0].indicators) {
-      return {
-        change: '-',
-        isGoingUp: '-',
-        max: '-',
-        min: '-',
-        minMaxCount: '-',
-        current: '-'
-      }
+    if (!response.result || !response.result[0].indicators || !response.result[0].indicators.quote[0]) {
+      return this.emptyResponse()
     }
 
-    let info = response.result[0].indicators.quote[0]
-    let length = info.close.length
-    let start = info.close[0]
-    let end = info.close[length - 1]
+    try {
+      let info = response.result[0].indicators.quote[0]
+      let length = info.close.length
+      let start = info.close[0]
+      let end = info.close[length - 1]
 
-    let result: StockCalculations = {
-      min: info.close[0],
-      max: info.close[0],
-      change: end / start,
-      minMaxCount: 0,
-      current: end,
-      isGoingUp: info.close[0] < info.close[1] ? true : false,
-    }
-
-
-    info.close.forEach((i, index) => {
-      if (i > result.max) result.max = i
-      if (i < result.min) result.min = i
-      if (index > 0 && index < length) {
-        // min
-        if (i < info.close[index - 1] && i < info.close[index + 1]) {
-          result.minMaxCount++
-          result.isGoingUp = true
-        }
-        // max
-        else if (i > info.close[index - 1] && i > info.close[index + 1]) {
-          result.minMaxCount++
-          result.isGoingUp = false
-        }
+      let result: StockCalculations = {
+        min: info.close[0],
+        max: info.close[0],
+        change: end / start,
+        minMaxCount: 0,
+        current: end,
+        isGoingUp: info.close[0] < info.close[1] ? true : false,
       }
-    })
 
-    return result
+
+      info.close.forEach((i, index) => {
+        if (i > result.max) result.max = i
+        if (i < result.min) result.min = i
+        if (index > 0 && index < length) {
+          // min
+          if (i < info.close[index - 1] && i < info.close[index + 1]) {
+            result.minMaxCount++
+            result.isGoingUp = true
+          }
+          // max
+          else if (i > info.close[index - 1] && i > info.close[index + 1]) {
+            result.minMaxCount++
+            result.isGoingUp = false
+          }
+        }
+      })
+      return result
+    } catch (ex) {
+      return this.emptyResponse()
+    }
   }
 
   private sendSuccessResponse(res: express.Response, data: any) {
@@ -268,8 +266,20 @@ class App {
       min: "xx",
       minMaxCount: "xx"
     }
+
   }
 
+  private emptyResponse(): StockCalculations {
+    return {
+      change: "-",
+      current: "-",
+      isGoingUp: "-",
+      max: "-",
+      min: "-",
+      minMaxCount: "-"
+    }
+
+  }
   private sleep(time): Promise<any> {
     return new Promise<any>((resolve, reject) => {
       setTimeout(() => resolve(null), time)
