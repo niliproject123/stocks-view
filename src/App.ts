@@ -1,3 +1,5 @@
+const chunks = require("split-array-into-chunks");
+const CallsAtATime = 5
 const RoundToCount = 2
 const RoundTo = require('round-to');
 const ObjectsToCsv = require('objects-to-csv');
@@ -101,16 +103,16 @@ class App {
     router.post('/getStocks', async (req: { body: YahooRequest }, res, next) => {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
-      this.getStocks(yahooReq).then((calcRes) => {
-
+      this.getStocks(yahooReq).then(async (calcRes) => {
         try {
           let dataForCsv = calcRes.map(i => this.prepareForCsv(i))
           let csv = new ObjectsToCsv(dataForCsv);
-          csv.toDisk('./results.csv');
+          await csv.toDisk('./results.csv');
+          console.log(await csv.toString())
         } catch (ex) {
           Object.assign({ errorSavingToCsv: ex }, calcRes)
         }
-        this.sendSuccessResponse(res, calcRes)
+        this.sendSuccessResponse(res, { working: true })
       }).catch((error) => {
         next(error)
       })
@@ -129,8 +131,8 @@ class App {
     this.express.use("/", router)
   }
 
-  private getStocks(req: YahooRequest): Promise<StockResult[]> {
-    return new Promise((resolve, reject) => {
+  private async getStocks(req: YahooRequest): Promise<StockResult[]> {
+    return new Promise(async (resolve, reject) => {
       let interval = req.interval
       let range = req.range
 
@@ -144,7 +146,12 @@ class App {
       if (!req.token) req.token = "90be91777fmsh4d0db53c47a0102p1b9749jsn22d531898dd0"
 
       var axios = require("axios").default;
-      let yahooRequests = req.symbols.map(symbol => {
+      let symbols: String[] = req.symbols ? req.symbols : this.fs.readFileSync('./stocks.txt', 'UTF8').split(EndOfLine)
+      let results = []
+      for (let i = 0; i < symbols.length; i++) {
+        let symbol = symbols[i]
+        console.log(new Date().toLocaleTimeString(), 'sleeping for ', symbol)
+        await this.sleep(4000)
         let options = {
           method: 'GET',
           url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
@@ -153,24 +160,37 @@ class App {
             'x-rapidapi-key': req.token,
             'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
           }
-        };
-        return axios.request(options)
-      })
-      Promise.all(yahooRequests).then((yahooResponses: { data: YahooResponse }[]) => {
-        let calculations = yahooResponses.map((yahooRes, index) => {
-          let stockRequestInfo: StockRequestInfo = {
-            symbol: req.symbols[index],
-            interval: interval,
-            range: range
-          }
-          let calcResult: StockCalculations = this.processSingleStock(yahooRes.data.chart)
-          let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
-          return calculation
-        })
-        resolve(calculations)
-      }).catch((error) => {
-        reject(error)
-      });
+        }
+        let yahooRes
+        let stockRequestInfo: StockRequestInfo = {
+          symbol: symbol,
+          interval: interval,
+          range: range
+        }
+
+        let isError = 'no'
+        let calcResult: StockCalculations = this.errorResponse()
+        try {
+          yahooRes = await axios.request(options)
+        } catch (ex) {
+          isError = ex.message
+        }
+        if (!yahooRes) {
+          isError = 'no response'
+        }
+        else if (!yahooRes.data || (yahooRes.data && yahooRes.data.error)) {
+          isError = 'no data'
+        }
+
+        if (isError === 'no') {
+          calcResult = this.processSingleStock(yahooRes.data.chart)
+        }
+
+        let calculation: StockResult = Object.assign(stockRequestInfo, calcResult)
+        results.push(calculation)
+        console.log(calculation)
+      }
+      resolve(results)
     })
   }
 
@@ -237,6 +257,23 @@ class App {
       else returned[key] = object[key]
     }
     return returned
+  }
+
+  private errorResponse(): StockCalculations {
+    return {
+      change: "xx",
+      current: "xx",
+      isGoingUp: "xx",
+      max: "xx",
+      min: "xx",
+      minMaxCount: "xx"
+    }
+  }
+
+  private sleep(time): Promise<any> {
+    return new Promise<any>((resolve, reject) => {
+      setTimeout(() => resolve(null), time)
+    })
   }
 }
 

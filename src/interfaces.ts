@@ -78,5 +78,6 @@ export interface Chart {
 
 export interface YahooResponse {
     chart: Chart;
+    error?
 }
 
