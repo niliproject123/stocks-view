@@ -11,6 +11,8 @@ export interface StockRequestInfo {
   symbol,
   range,
   interval,
+  period1,
+  period2
 }
 
 export interface StockCalculations {
@@ -26,7 +28,8 @@ export interface StockResult extends StockCalculations, StockCalculations { }
 
 export interface YahooRequest {
   symbols: string[],
-  range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" | "10y" | "ytd" | "max",
+  range?: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" | "10y" | "ytd" | "max",
+  period1?, period2,
   interval: "1m" | "2m" | "5m" | "15m" | "60m" | "1d",
   token: string
 }
@@ -72,6 +75,22 @@ class App {
     this.mountRoutes()
   }
 
+  private validateRequest(req: YahooRequest) {
+    let range = req.range; let period1 = req.period1; let period2 = req.period2; let interval = req.interval;
+
+    if (!range && !(period1 && period2)) {
+      throw new Error("must have range or period1 and priod2")
+    }
+    if (range && (period1 || period2)) {
+      throw new Error("must have only range or period1 and priod2")
+    }
+    if (AllowedIntervals.indexOf(interval) === -1) {
+      throw new Error("allowed interval values are: " + AllowedIntervals.join(','))
+    }
+    if (range && AllowedRange.indexOf(range) === -1) {
+      throw new Error("allowed range values are: " + AllowedRange.join(','))
+    }
+  }
   private mountRoutes(): void {
     let bodyParser = require("body-parser")
     //noinspection TypeScriptUnresolvedFunction
@@ -103,6 +122,8 @@ class App {
     router.post('/getStocks', async (req: { body: YahooRequest }, res, next) => {
       //      this.fs.writeFileSync(filePath, clearedFileContents[filePath])
       let yahooReq = req.body
+
+      try { this.validateRequest(req.body) } catch (ex) { next(ex); return }
       this.sendSuccessResponse(res, { working: true })
       this.getStocks(yahooReq).then(async (calcRes) => {
         try {
@@ -135,12 +156,16 @@ class App {
     return new Promise(async (resolve, reject) => {
       let interval = req.interval
       let range = req.range
+      let period1 = req.period1
+      let period2 = req.period2
 
-      if (AllowedIntervals.indexOf(interval) === -1) {
-        reject("allowed interval values are: " + AllowedIntervals.join(','))
-      }
-      if (AllowedRange.indexOf(range) === -1) {
-        reject("allowed range values are: " + AllowedRange.join(','))
+      if (period1) {
+        try {
+          period1 = new Date(period1).getTime() / 1000
+          period2 = new Date(period2).getTime() / 1000
+        } catch (ex) {
+          reject("failed converting periods to date: " + ex.getMessage())
+        }
       }
 
       if (!req.token) req.token = "90be91777fmsh4d0db53c47a0102p1b9749jsn22d531898dd0"
@@ -152,10 +177,11 @@ class App {
         let symbol = symbols[i]
         console.log(new Date().toLocaleTimeString(), 'sleeping for ', symbol)
         await this.sleep(4000)
+        let rangParams = range ? { range: range } : { period1: period1, period2: period2 }
         let options = {
           method: 'GET',
           url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v2/get-chart',
-          params: { interval: interval, symbol: symbol, range: range },
+          params: Object.assign({ interval: interval, symbol: symbol }, rangParams),
           headers: {
             'x-rapidapi-key': req.token,
             'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
@@ -165,7 +191,9 @@ class App {
         let stockRequestInfo: StockRequestInfo = {
           symbol: symbol,
           interval: interval,
-          range: range
+          range: range,
+          period1: period1 ? new Date(period1).toString() : '',
+          period2: period1 ? new Date(period2).toString() : '',
         }
 
         let isError = 'no'
